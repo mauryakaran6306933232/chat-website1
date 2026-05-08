@@ -1,0 +1,11 @@
+import express from 'express';
+import { upload } from '../middleware/multer.js';
+import { updateProfilePicture , getOtherUsers, userLogin, userLogout, userRegister } from '../controlers/userControler.js';
+import { isAuthenticate } from '../middleware/isAuthenticate.js';
+const router=express.Router(); 
+router.post('/register' , userRegister);
+router.post('/login' , userLogin);
+router.post('/update-profile-pic', isAuthenticate, upload.single("profilePic"), updateProfilePicture);
+router.get('/logout' , isAuthenticate ,userLogout);
+router.get('/getOtherUsers' ,isAuthenticate , getOtherUsers );
+export default router;
