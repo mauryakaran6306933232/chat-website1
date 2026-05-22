@@ -1,76 +1,10 @@
-// import React, { useRef } from 'react';
-// import axios from 'axios';
-// import { useSelector, useDispatch } from 'react-redux';
-// import toast from 'react-hot-toast';
-// import { IoCamera } from 'react-icons/io5';
 
-// export default function UpdateProfilePic() {
-//   const { authUser } = useSelector(store => store.user);
-//   const dispatch = useDispatch();
-//   const fileInputRef = useRef(null);
-
-//   const handleImageUpload = async (e) => {
-//     const file = e.target.files[0];
-//     if (!file) return;
-
-//     if (file.size > 2 * 1024 * 1024) {
-//       return toast.error("Image must be under 2MB");
-//     }
-
-//     const formData = new FormData();
-//     formData.append("profilePic", file);
-
-//     try {
-//       const res = await axios.post(`http://localhost:8001/test/update-profile-pic`, formData, {
-//         headers: { "Content-Type": "multipart/form-data" },
-//         withCredentials: true
-//       });
-
-//       if (res.data.success) {
-//         toast.success("Profile updated!");
-//         // Update Redux. If you don't have a "setUser" action in UserSlice, 
-//         // you can just use: window.location.reload();
-//         dispatch({ type: "setUser", payload: res.data.user }); 
-//       }
-//     } catch (error) {
-//       toast.error(error?.response?.data?.message || "Upload failed");
-//     }
-//   };
-
-//   return (
-//     <div 
-//       // Used your exact classes here so it fits perfectly in your layout
-//       className="btn btn-circle bg-zinc-500 relative group cursor-pointer ml-[5px] overflow-hidden" 
-//       onClick={() => fileInputRef.current.click()}
-//     >
-//       {/* Shows your current profile picture inside the circle */}
-//       <img 
-//         src={authUser?.profilePicture || `https://api.dicebear.com/6.x/bottts/svg?seed=${authUser?.username}`} 
-//         alt="Profile" 
-//         className="w-full h-full object-cover"
-//       />
-      
-//       {/* Camera icon appears when you hover over it */}
-//       <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-//         <IoCamera className="text-white text-xl" />
-//       </div>
-
-//       <input 
-//         type="file" 
-//         ref={fileInputRef} 
-//         className="hidden" 
-//         accept="image/*"
-//         onChange={handleImageUpload} 
-//       />
-//     </div>
-//   );
-// }
 import React, { useRef, useState } from 'react';
 import axios from 'axios';
 import { useSelector, useDispatch } from 'react-redux';
 import toast from 'react-hot-toast';
 import { IoCamera } from 'react-icons/io5';
-
+import API_URL from '../utils/apiUrl';
 export default function UpdateProfilePic() {
   const { authUser } = useSelector(store => store.user);
   const dispatch = useDispatch();
@@ -95,7 +29,7 @@ export default function UpdateProfilePic() {
     setIsLoading(true);
 
     try {
-      const res = await axios.post(`http://localhost:8001/test/update-profile-pic`, formData, {
+      const res = await axios.post(`${API_URL}/test/update-profile-pic`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
         withCredentials: true
       });

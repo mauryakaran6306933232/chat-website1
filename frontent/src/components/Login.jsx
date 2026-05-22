@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import API_URL from '../utils/apiUrl'
 import toast from 'react-hot-toast'
 import axios from 'axios'
 import { useSelector, useDispatch } from 'react-redux'
@@ -25,7 +26,7 @@ export default function Login() {
   const onSubmitHandler = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:8001/test/login', user, {
+      const res = await axios.post(`${API_URL}/test/login`, user, {
         headers: { 'Content-Type': "application/json" },
         withCredentials: true
       });

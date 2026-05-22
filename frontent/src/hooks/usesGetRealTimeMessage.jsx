@@ -4,7 +4,7 @@ import { useSelector, useDispatch } from 'react-redux'
 import { addMessage, updateMessages } from "../redux/messageSlice";
 import { incrementUnread } from "../redux/UserSlice"; // Points to UserSlice now
 import axios from "axios";
-
+import API_URL from '../utils/apiUrl';
 const useGetRealTimeMessage = (selectedUser) => {
   const dispatch = useDispatch();
   const { socket } = useSelector(store => store.socket);
@@ -29,7 +29,7 @@ const useGetRealTimeMessage = (selectedUser) => {
 dispatch(addMessage(p1));
 
       if (p1.senderId === selectedUser?._id) {
-        axios.post(`http://localhost:8001/test/mark-read/${selectedUser._id}`, {}, { withCredentials: true })
+        axios.post(`${API_URL}/test/mark-read/${selectedUser._id}`, {}, { withCredentials: true })
           .catch(err => console.log("Realtime mark read error:", err));
       }
     };

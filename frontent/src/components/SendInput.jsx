@@ -3,6 +3,7 @@ import { IoSend } from 'react-icons/io5'
 import { IoAttach } from 'react-icons/io5';
 import { IoClose } from 'react-icons/io5';
 import axios from 'axios'
+import API_URL from '../utils/apiUrl'
 import Store from '../redux/store'
 import toast from 'react-hot-toast'
 import { useSelector, useDispatch } from 'react-redux'
@@ -50,7 +51,7 @@ export default function SendInput() {
 
       try {
         const res = await axios.post(
-          `http://localhost:8001/test/upload-file/${selectedUser._id}`,
+          `${API_URL}/test/upload-file/${selectedUser._id}`,
           formData,
           { headers: { "Content-Type": "multipart/form-data" }, withCredentials: true }
         );
@@ -79,7 +80,7 @@ export default function SendInput() {
 
     try {
       const res = await axios.post(
-        `http://localhost:8001/test/sendMessage/${selectedUser._id}`,
+        `${API_URL}/test/sendMessage/${selectedUser._id}`,
         { 
           message: encryptMessage(message1),
           replyTo: replyTo

@@ -2,13 +2,14 @@ import React, { useEffect } from 'react'
 import axios from "axios"
 import { useDispatch } from 'react-redux'
 import toast from 'react-hot-toast';
+import API_URL from '../utils/apiUrl';
 import { setOtherUsers } from '../redux/UserSlice';
 const useGetOtherUser = () => {
       const dispatch = useDispatch();
     useEffect(() => {
         const fetchOtherUser = async () => {
             try {
-                const res = await axios.get('http://localhost:8001/test/getOtherUsers', {
+                const res = await axios.get(`${API_URL}/test/getOtherUsers`, {
                     headers: {
                         "Content-Type": 'application/json'
                     },
