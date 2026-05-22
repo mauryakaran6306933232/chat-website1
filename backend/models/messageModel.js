@@ -1,22 +1,3 @@
-// import mongoose from "mongoose";
-// import { User } from "./userModel.js";
-// const messageModel = new mongoose.Schema({
-//     senderId : {
-//         type : mongoose.Schema.Types.ObjectId,
-//         ref :"User",
-//         required : true
-//     },
-//     receiverId :{
-//         type : mongoose.Schema.Types.ObjectId,
-//         ref : "User",
-//         required : true
-//     },
-//    message : {
-//     type : String,
-//     required : true
-//    } 
-// },{timestamps : true});
-// export const Message = mongoose.model('Message' , messageModel);
 import mongoose from "mongoose";
 import { User } from "./userModel.js";
 
@@ -57,11 +38,27 @@ const messageModel = new mongoose.Schema({
         type: String,
         default: ""
     },
-    // NEW: Helps the frontend know if it should show an <img>, <video>, or a download link
-    fileType: {
-        type: String,
-        default: ""
-    }
+    // ... existing fields (fileUrl, fileType, etc.)
+fileType: {
+    type: String,
+    default: ""
+},
+// ========== NEW CALL RECORD FIELDS ==========
+callType: {
+    type: String,
+    enum: ['', 'audio', 'video'],
+    default: ''
+},
+callStatus: {
+    type: String,
+    enum: ['', 'missed', 'completed'],
+    default: ''
+},
+callDuration: {
+    type: Number, // Duration in seconds
+    default: 0
+}
+// ============================================
 }, { timestamps: true });
 
 export const Message = mongoose.model('Message', messageModel);

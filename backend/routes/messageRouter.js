@@ -1,10 +1,4 @@
-// import express from 'express';
-// import { isAuthenticate } from '../middleware.js/isAuthenticate.js';
-// import { getMessages, sendMessage } from '../controlers/messageControle.js';
-// const router= express.Router();
-// router.post('/sendMessage/:id', isAuthenticate , sendMessage);
-// router.get('/getMessage/:id', isAuthenticate , getMessages);
-// export default router;
+import { saveCallRecord } from '../controlers/messageControle.js';
 import express from 'express';
 import { isAuthenticate } from '../middleware/isAuthenticate.js';
 // 1. ADDED markMessagesAsRead TO THE IMPORT:
@@ -21,5 +15,5 @@ router.delete('/delete-message/:messageId', isAuthenticate, deleteMessage);
 
 // 2. ADDED THE MISSING ROUTE:
 router.post('/mark-read/:id', isAuthenticate, markMessagesAsRead);
-
+router.post("/save-call", isAuthenticate, saveCallRecord);
 export default router;
