@@ -17,7 +17,7 @@ export default function Signup1() {
   const [user, setUser] = useState({
     username: "",
     password: "",
-    confirmPassword: "",
+    fullPassword: "",
     gender: ""
   });
 
@@ -54,7 +54,7 @@ export default function Signup1() {
         setUser({
           username: "",
           password: "",
-          confirmPassword: "",
+          fullPassword: "",
           gender: ""
         });
 
@@ -165,11 +165,11 @@ export default function Signup1() {
               type="password"
               placeholder="Confirm Password"
               autoComplete="new-password"
-              value={user.confirmPassword}
+              value={user.fullPassword}
               onChange={(e) =>
                 setUser({
                   ...user,
-                  confirmPassword: e.target.value
+                  fullPassword: e.target.value
                 })
               }
             />
