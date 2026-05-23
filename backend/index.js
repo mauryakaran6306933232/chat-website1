@@ -52,7 +52,7 @@ const io = new Server(server, {
   cors: {
     origin: [
       "http://localhost:3000",
-      "https://chat-website1.vercel.app"
+      "https://chat-website1-jy4bxss7v-altransions-projects.vercel.app/"
     ],
     methods: ["GET", "POST"],
     credentials: true,
