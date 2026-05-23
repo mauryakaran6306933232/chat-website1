@@ -31,13 +31,7 @@ export default function Login() {
         withCredentials: true
       });
       
-      // if (res?.data?.success) {
-      //   toast.success(res.data.message);
-      //   dispatch(setAuthUser(res.data.user));
-      // }
-      
-      // setUser({ username: "", password: "" });
-      // navigate("/homepage");
+ 
       if (res?.data?.success) {
     toast.success(res.data.message);
     dispatch(setAuthUser(res.data.user));
