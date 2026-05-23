@@ -222,7 +222,7 @@ app.use(cookieParser());
 // ==========================================
 app.use(
   cors({
-    origin: true,
+    origin: "https://chat-website1-jy4bxss7v-altransions-projects.vercel.app/",
     credentials: true,
   })
 );
@@ -253,7 +253,7 @@ const server = http.createServer(app);
 // ==========================================
 const io = new Server(server, {
   cors: {
-    origin: true,
+    origin: "https://chat-website1-jy4bxss7v-altransions-projects.vercel.app/",
     methods: ["GET", "POST"],
     credentials: true,
   },
