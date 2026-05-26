@@ -362,7 +362,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
 import axios from "axios";
-import API_URL from '../utils/apiUrl';
+import API_URL from "../utils/apiUrl";
 
 export const useWebRTC = () => {
   const { socket } = useSelector((store) => store.socket);
@@ -377,15 +377,13 @@ export const useWebRTC = () => {
   const currentCallerIdRef = useRef(null);
   const currentCallTypeRef = useRef(null);
 
-  // REFS FOR CALL RECORDS
   const callStartTime = useRef(null);
   const wasConnected = useRef(false);
 
-  // REFS FOR RINGING TIMEOUT
   const ringTimeoutRef = useRef(null);
   const disconnectTimeoutRef = useRef(null);
+  const iceRestartCount = useRef(0);
 
-  // AUDIO REFS FOR RINGTONES
   const ringbackToneRef = useRef(null);
   const incomingRingtoneRef = useRef(null);
 
@@ -396,21 +394,27 @@ export const useWebRTC = () => {
     isIncomingCall: false,
     callType: null,
     callerId: null,
+    connectionStatus: "idle",
   });
 
   // ==========================================
-  // ICE SERVERS WITH TURN (CRITICAL FOR PRODUCTION)
+  // ICE SERVERS - MULTIPLE TURN PROVIDERS
   // ==========================================
-  const iceServers = {
+  const getIceServers = () => ({
     iceServers: [
-      // Multiple STUN servers for reliability
+      // Google STUN servers
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
       { urls: "stun:stun2.l.google.com:19302" },
       { urls: "stun:stun3.l.google.com:19302" },
       { urls: "stun:stun4.l.google.com:19302" },
-      // TURN servers (REQUIRED for NAT traversal in production)
-      // Free TURN from Metered Open Relay Project
+
+      // Twilio STUN
+      { urls: "stun:global.stun.twilio.com:3478" },
+
+      // =============================================
+      // TURN SERVER 1: Open Relay Project (Metered)
+      // =============================================
       {
         urls: "turn:openrelay.metered.ca:80",
         username: "openrelayproject",
@@ -426,21 +430,61 @@ export const useWebRTC = () => {
         username: "openrelayproject",
         credential: "openrelayproject",
       },
+
+      // =============================================
+      // TURN SERVER 2: Metered Relay (different endpoint)
+      // =============================================
+      {
+        urls: "turn:a.relay.metered.ca:80",
+        username: "openrelayproject",
+        credential: "openrelayproject",
+      },
+      {
+        urls: "turn:a.relay.metered.ca:443",
+        username: "openrelayproject",
+        credential: "openrelayproject",
+      },
+      {
+        urls: "turn:a.relay.metered.ca:443?transport=tcp",
+        username: "openrelayproject",
+        credential: "openrelayproject",
+      },
+
+      // =============================================
+      // TURN SERVER 3: Another free relay
+      // =============================================
+      {
+        urls: "turn:global.relay.metered.ca:80",
+        username: "e8dd65b92f7a292a0a0f7f3e",
+        credential: "fSkYeRbxNTUku5YV",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:443",
+        username: "e8dd65b92f7a292a0a0f7f3e",
+        credential: "fSkYeRbxNTUku5YV",
+      },
+      {
+        urls: "turn:global.relay.metered.ca:443?transport=tcp",
+        username: "e8dd65b92f7a292a0a0f7f3e",
+        credential: "fSkYeRbxNTUku5YV",
+      },
     ],
-  };
+    // IMPORTANT: Use 'all' to allow both direct and TURN connections
+    iceTransportPolicy: "all",
+  });
 
   // ==========================================
-  // AUDIO HELPER FUNCTIONS
+  // AUDIO HELPERS
   // ==========================================
   const playRingback = () => {
     try {
       if (!ringbackToneRef.current) {
-        ringbackToneRef.current = new Audio('/ringback.mp3');
+        ringbackToneRef.current = new Audio("/ringback.mp3");
         ringbackToneRef.current.loop = true;
       }
       ringbackToneRef.current.play().catch(() => {});
     } catch (e) {
-      // Ringtone file might not exist, that's OK
+      // Ringtone file might not exist
     }
   };
 
@@ -454,12 +498,12 @@ export const useWebRTC = () => {
   const playIncoming = () => {
     try {
       if (!incomingRingtoneRef.current) {
-        incomingRingtoneRef.current = new Audio('/incoming.mp3');
+        incomingRingtoneRef.current = new Audio("/incoming.mp3");
         incomingRingtoneRef.current.loop = true;
       }
       incomingRingtoneRef.current.play().catch(() => {});
     } catch (e) {
-      // Ringtone file might not exist, that's OK
+      // Ringtone file might not exist
     }
   };
 
@@ -468,6 +512,17 @@ export const useWebRTC = () => {
       incomingRingtoneRef.current.pause();
       incomingRingtoneRef.current.currentTime = 0;
     }
+  };
+
+  // ==========================================
+  // UPDATE CONNECTION STATUS HELPER
+  // ==========================================
+  const updateConnectionStatus = (status) => {
+    console.log("■ Connection Status:", status);
+    setCallState((prev) => ({
+      ...prev,
+      connectionStatus: status,
+    }));
   };
 
   // ==========================================
@@ -488,18 +543,21 @@ export const useWebRTC = () => {
   // CREATE PEER CONNECTION
   // ==========================================
   const createPeerConnection = () => {
-    // Close any existing connection first
     if (peerConnection.current) {
+      peerConnection.current.ontrack = null;
+      peerConnection.current.onicecandidate = null;
+      peerConnection.current.onconnectionstatechange = null;
+      peerConnection.current.oniceconnectionstatechange = null;
       peerConnection.current.close();
       peerConnection.current = null;
     }
 
-    peerConnection.current = new RTCPeerConnection(iceServers);
+    const config = getIceServers();
+    peerConnection.current = new RTCPeerConnection(config);
 
     // Handle remote tracks
     peerConnection.current.ontrack = (event) => {
-      console.log("■ ontrack fired:", event.track.kind);
-      // Create a fresh MediaStream with all remote tracks
+      console.log("■ ontrack fired:", event.track.kind, "streams:", event.streams.length);
       const newRemoteStream = new MediaStream();
       event.streams[0].getTracks().forEach((track) => {
         newRemoteStream.addTrack(track);
@@ -513,45 +571,140 @@ export const useWebRTC = () => {
       if (event.candidate) {
         const targetId = currentCallerIdRef.current || currentTargetRef.current;
         if (targetId && socket) {
-          socket.emit("ice_candidate", { to: targetId, candidate: event.candidate });
+          socket.emit("ice_candidate", {
+            to: targetId,
+            candidate: event.candidate,
+          });
         }
+      } else {
+        // ICE gathering is complete (null candidate)
+        console.log("■ ICE gathering complete");
       }
     };
 
-    // Handle connection state changes (WITH TIMEOUT - NOT IMMEDIATE CLEANUP)
+    // Handle ICE gathering state
+    peerConnection.current.onicegatheringstatechange = () => {
+      console.log(
+        "■ ICE Gathering State:",
+        peerConnection.current?.iceGatheringState
+      );
+    };
+
+    // Handle connection state changes
     peerConnection.current.onconnectionstatechange = () => {
       const state = peerConnection.current?.connectionState;
-      console.log("■ Connection state:", state);
+      console.log("■ Connection State:", state);
 
       if (state === "connected") {
-        // Clear any disconnect timeout since we reconnected
         if (disconnectTimeoutRef.current) {
           clearTimeout(disconnectTimeoutRef.current);
           disconnectTimeoutRef.current = null;
         }
         wasConnected.current = true;
         callStartTime.current = Date.now();
+        iceRestartCount.current = 0;
+        updateConnectionStatus("connected");
       }
 
       if (state === "disconnected") {
-        // DON'T immediately clean up! Give it 10 seconds to reconnect
-        console.log("■ Disconnected - waiting 10s before cleanup...");
+        updateConnectionStatus("reconnecting");
+        console.log(
+          "■ Disconnected - waiting 10s then trying ICE restart..."
+        );
+
+        // Wait 5 seconds, then try ICE restart
         disconnectTimeoutRef.current = setTimeout(() => {
-          console.log("■ Still disconnected after 10s - cleaning up");
-          cleanupCall();
-        }, 10000);
+          if (
+            peerConnection.current &&
+            peerConnection.current.connectionState === "disconnected"
+          ) {
+            if (iceRestartCount.current < 3) {
+              console.log(
+                "■ Attempting ICE restart, attempt:",
+                iceRestartCount.current + 1
+              );
+              attemptIceRestart();
+            } else {
+              console.log("■ Max ICE restart attempts reached - cleaning up");
+              cleanupCall();
+            }
+          }
+        }, 5000);
       }
 
       if (state === "failed") {
-        console.log("■ Connection failed - cleaning up");
-        cleanupCall();
+        console.log("■ Connection failed - attempting ICE restart");
+        if (iceRestartCount.current < 3) {
+          attemptIceRestart();
+        } else {
+          updateConnectionStatus("failed");
+          // Don't auto-cleanup, let user see the error and decide
+        }
       }
     };
 
-    // Log ICE connection state for debugging
+    // Handle ICE connection state (more granular than connection state)
     peerConnection.current.oniceconnectionstatechange = () => {
-      console.log("■ ICE Connection State:", peerConnection.current?.iceConnectionState);
+      const iceState = peerConnection.current?.iceConnectionState;
+      console.log("■ ICE Connection State:", iceState);
+
+      if (iceState === "checking") {
+        updateConnectionStatus("connecting");
+      }
+
+      if (iceState === "connected" || iceState === "completed") {
+        updateConnectionStatus("connected");
+      }
+
+      if (iceState === "failed") {
+        if (iceRestartCount.current < 3) {
+          console.log("■ ICE failed - attempting restart");
+          attemptIceRestart();
+        } else {
+          updateConnectionStatus("failed");
+        }
+      }
     };
+  };
+
+  // ==========================================
+  // ICE RESTART (CRITICAL FOR CROSS-NETWORK)
+  // ==========================================
+  const attemptIceRestart = async () => {
+    try {
+      iceRestartCount.current += 1;
+
+      if (!peerConnection.current) return;
+
+      // Get fresh ICE servers
+      const config = getIceServers();
+      peerConnection.current.setConfiguration(config);
+
+      // Create new offer with ICE restart flag
+      const offer = await peerConnection.current.createOffer({
+        iceRestart: true,
+      });
+      await peerConnection.current.setLocalDescription(offer);
+
+      const targetId =
+        currentCallerIdRef.current || currentTargetRef.current;
+      if (targetId && socket) {
+        socket.emit("call_user", {
+          userToCall: targetId,
+          from: authUser?._id,
+          signal: offer,
+          callType: currentCallTypeRef.current || callState.callType,
+        });
+      }
+
+      updateConnectionStatus("reconnecting");
+      console.log("■ ICE restart offer sent, attempt:", iceRestartCount.current);
+    } catch (error) {
+      console.error("ICE restart failed:", error);
+      if (iceRestartCount.current >= 3) {
+        updateConnectionStatus("failed");
+      }
+    }
   };
 
   // ==========================================
@@ -559,18 +712,22 @@ export const useWebRTC = () => {
   // ==========================================
   const initiateCall = async (targetUserId, callType) => {
     try {
+      console.log("■ Initiating call to:", targetUserId, "type:", callType);
+
       currentTargetRef.current = targetUserId;
       currentCallerIdRef.current = null;
       currentCallTypeRef.current = callType;
       iceCandidatesQueue.current = [];
       callStartTime.current = null;
       wasConnected.current = false;
+      iceRestartCount.current = 0;
 
       setCallState({
         isCallActive: true,
         isIncomingCall: false,
         callType,
         callerId: null,
+        connectionStatus: "connecting",
       });
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -597,7 +754,6 @@ export const useWebRTC = () => {
         callType,
       });
 
-      // PLAY RINGBACK TONE
       playRingback();
 
       // 1 MINUTE RINGING TIMEOUT
@@ -616,7 +772,9 @@ export const useWebRTC = () => {
       }, 60000);
     } catch (error) {
       console.error("Error getting media:", error);
-      alert("Could not access camera/microphone. Please allow permissions and try again.");
+      alert(
+        "Could not access camera/microphone. Please allow permissions and try again."
+      );
       cleanupCall();
     }
   };
@@ -628,15 +786,21 @@ export const useWebRTC = () => {
     try {
       if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
 
-      // STOP INCOMING RINGTONE
       stopIncoming();
 
       iceCandidatesQueue.current = [];
       callStartTime.current = null;
       wasConnected.current = false;
+      iceRestartCount.current = 0;
 
-      const currentCallType = currentCallTypeRef.current || callState.callType;
-      const currentCallerId = currentCallerIdRef.current || callState.callerId;
+      const currentCallType =
+        currentCallTypeRef.current || callState.callType;
+      const currentCallerId =
+        currentCallerIdRef.current || callState.callerId;
+
+      console.log("■ Answering call from:", currentCallerId);
+
+      updateConnectionStatus("connecting");
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: currentCallType === "video",
@@ -664,7 +828,6 @@ export const useWebRTC = () => {
       const answer = await peerConnection.current.createAnswer();
       await peerConnection.current.setLocalDescription(answer);
 
-      // Update the caller ID ref for ICE candidate routing
       currentCallerIdRef.current = currentCallerId;
 
       socket.emit("answer_call", {
@@ -676,15 +839,17 @@ export const useWebRTC = () => {
         ...prev,
         isIncomingCall: false,
         isCallActive: true,
+        connectionStatus: "connecting",
       }));
     } catch (error) {
       console.error("Error answering call:", error);
+      alert("Failed to answer call: " + error.message);
       rejectCall();
     }
   };
 
   // ==========================================
-  // REJECT CALL (RECEIVER)
+  // REJECT CALL
   // ==========================================
   const rejectCall = () => {
     const callerId = currentCallerIdRef.current || callState.callerId;
@@ -692,7 +857,6 @@ export const useWebRTC = () => {
       socket.emit("reject_call", { to: callerId });
     }
 
-    // STOP INCOMING RINGTONE
     stopIncoming();
 
     saveCallToDB({
@@ -707,7 +871,7 @@ export const useWebRTC = () => {
   };
 
   // ==========================================
-  // END CALL (EITHER USER)
+  // END CALL
   // ==========================================
   const endCall = () => {
     if (ringTimeoutRef.current) {
@@ -715,10 +879,10 @@ export const useWebRTC = () => {
       ringTimeoutRef.current = null;
     }
 
-    // STOP RINGBACK (In case caller hangs up before answer)
     stopRingback();
 
-    const targetId = currentCallerIdRef.current || currentTargetRef.current;
+    const targetId =
+      currentCallerIdRef.current || currentTargetRef.current;
     if (targetId && socket) {
       socket.emit("end_call", { to: targetId });
     }
@@ -734,7 +898,9 @@ export const useWebRTC = () => {
     const isCaller = !callState.callerId && !currentCallerIdRef.current;
 
     saveCallToDB({
-      senderId: isCaller ? authUser._id : (currentCallerIdRef.current || callState.callerId),
+      senderId: isCaller
+        ? authUser._id
+        : currentCallerIdRef.current || callState.callerId,
       receiverId: isCaller ? currentTargetRef.current : authUser._id,
       callType: currentCallTypeRef.current || callState.callType,
       callStatus: status,
@@ -742,6 +908,50 @@ export const useWebRTC = () => {
     });
 
     cleanupCall();
+  };
+
+  // ==========================================
+  // RETRY CONNECTION (called from UI)
+  // ==========================================
+  const retryConnection = () => {
+    console.log("■ User requested connection retry");
+    iceRestartCount.current = 0;
+
+    if (peerConnection.current) {
+      // Close and recreate everything
+      if (localStream.current) {
+        localStream.current.getTracks().forEach((track) => track.stop());
+      }
+
+      if (peerConnection.current) {
+        peerConnection.current.ontrack = null;
+        peerConnection.current.onicecandidate = null;
+        peerConnection.current.onconnectionstatechange = null;
+        peerConnection.current.oniceconnectionstatechange = null;
+        peerConnection.current.close();
+        peerConnection.current = null;
+      }
+
+      remoteStreamRef.current = new MediaStream();
+      iceCandidatesQueue.current = [];
+
+      // Re-initiate the call
+      const targetId =
+        currentCallerIdRef.current || currentTargetRef.current;
+      const callType = currentCallTypeRef.current || callState.callType;
+
+      if (targetId && callType) {
+        // If we were the receiver, we need to re-answer
+        // If we were the caller, we re-initiate
+        const wasCaller = !currentCallerIdRef.current;
+        if (wasCaller) {
+          initiateCall(targetId, callType);
+        } else {
+          // For receiver, try to re-answer with the stored signal
+          answerCall();
+        }
+      }
+    }
   };
 
   // ==========================================
@@ -771,17 +981,14 @@ export const useWebRTC = () => {
       disconnectTimeoutRef.current = null;
     }
 
-    // STOP ALL SOUNDS
     stopRingback();
     stopIncoming();
 
-    // Stop local media tracks
     if (localStream.current) {
       localStream.current.getTracks().forEach((track) => track.stop());
       localStream.current = null;
     }
 
-    // Close peer connection
     if (peerConnection.current) {
       peerConnection.current.ontrack = null;
       peerConnection.current.onicecandidate = null;
@@ -791,7 +998,6 @@ export const useWebRTC = () => {
       peerConnection.current = null;
     }
 
-    // Reset all refs
     remoteStreamRef.current = new MediaStream();
     incomingSignalRef.current = null;
     currentTargetRef.current = null;
@@ -800,8 +1006,8 @@ export const useWebRTC = () => {
     iceCandidatesQueue.current = [];
     callStartTime.current = null;
     wasConnected.current = false;
+    iceRestartCount.current = 0;
 
-    // Reset all state
     setLocalStreamState(null);
     setRemoteStreamState(null);
     setCallState({
@@ -809,6 +1015,7 @@ export const useWebRTC = () => {
       isIncomingCall: false,
       callType: null,
       callerId: null,
+      connectionStatus: "idle",
     });
   };
 
@@ -829,21 +1036,20 @@ export const useWebRTC = () => {
         isIncomingCall: true,
         callType,
         callerId: from,
+        connectionStatus: "ringing",
       });
 
-      // PLAY INCOMING RINGTONE
       playIncoming();
     };
 
     const handleCallAccepted = async ({ signal }) => {
-      console.log("■ Call accepted");
+      console.log("■ Call accepted by other user");
 
       if (ringTimeoutRef.current) {
         clearTimeout(ringTimeoutRef.current);
         ringTimeoutRef.current = null;
       }
 
-      // STOP RINGBACK TONE
       stopRingback();
 
       if (peerConnection.current) {
@@ -853,17 +1059,25 @@ export const useWebRTC = () => {
           );
           processQueue();
         } catch (err) {
-          console.error("Error setting remote description on call accepted:", err);
+          console.error(
+            "Error setting remote description on call accepted:",
+            err
+          );
         }
       }
 
-      setCallState((prev) => ({ ...prev, isCallActive: true }));
+      setCallState((prev) => ({
+        ...prev,
+        isCallActive: true,
+        connectionStatus: "connecting",
+      }));
     };
 
     const handleIceCandidate = ({ candidate }) => {
-      console.log("■ ICE candidate received");
-      iceCandidatesQueue.current.push(candidate);
-      processQueue();
+      if (candidate) {
+        iceCandidatesQueue.current.push(candidate);
+        processQueue();
+      }
     };
 
     const handleCallEnded = () => {
@@ -929,5 +1143,6 @@ export const useWebRTC = () => {
     endCall,
     toggleMic,
     toggleCamera,
+    retryConnection,
   };
 };

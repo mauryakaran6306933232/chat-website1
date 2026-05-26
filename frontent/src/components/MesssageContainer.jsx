@@ -44,44 +44,52 @@
 // };
 
 // export default MesssageContainer;
-import React from 'react';
-import { useSelector } from 'react-redux';
-import Messages from './Messages';
-import SendInput from './SendInput';
+import React from "react";
+import { useSelector } from "react-redux";
+import Messages from "./Messages";
+import SendInput from "./SendInput";
 
 const MesssageContainer = ({ onBack, onInitiateCall }) => {
-  const { selectedUser } = useSelector(store => store.user);
+  const { selectedUser } = useSelector((store) => store.user);
 
-  // If no user is selected, do not render the chat container at all
   if (!selectedUser) return null;
 
   return (
-    <div className='flex flex-col h-full w-full relative'>
+    <div className="flex flex-col h-full w-full relative">
       {/* CHAT HEADER */}
-      <div className='flex items-center justify-between px-3 sm:px-4 py-3 bg-slate-800/50 border-b border-white/10'>
-        <div className='flex items-center gap-3 min-w-0 flex-1'>
-          {/* Back Button (Mobile Only) */}
+      <div className="flex items-center justify-between px-3 sm:px-4 py-3 bg-slate-800/50 border-b border-white/10">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
           <button
             onClick={onBack}
-            className='md:hidden text-white text-2xl hover:bg-white/10 p-1 rounded-full active:scale-95 transition-transform'
+            className="md:hidden text-white text-2xl hover:bg-white/10 p-1 rounded-full active:scale-95 transition-transform"
           >
-            <svg width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+            <svg
+              width="24"
+              height="24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
           </button>
 
-          <div className='flex items-center gap-3 min-w-0'>
-            <span className='text-white font-semibold text-base sm:text-lg truncate'>
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-white font-semibold text-base sm:text-lg truncate">
               {selectedUser?.username}
             </span>
           </div>
         </div>
 
-        {/* CALL ICONS */}
-        <div className='flex items-center gap-1 sm:gap-2 shrink-0 ml-2'>
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0 ml-2">
           <button
-            onClick={() => onInitiateCall(selectedUser?._id, 'audio')}
-            className='w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors'
+            onClick={() => onInitiateCall(selectedUser?._id, "audio")}
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors"
             title="Audio Call"
           >
             <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
@@ -89,8 +97,8 @@ const MesssageContainer = ({ onBack, onInitiateCall }) => {
             </svg>
           </button>
           <button
-            onClick={() => onInitiateCall(selectedUser?._id, 'video')}
-            className='w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors'
+            onClick={() => onInitiateCall(selectedUser?._id, "video")}
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors"
             title="Video Call"
           >
             <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
@@ -100,11 +108,9 @@ const MesssageContainer = ({ onBack, onInitiateCall }) => {
         </div>
       </div>
 
-      {/* MESSAGES AREA */}
       <Messages />
 
-      {/* INPUT AREA */}
-      <div className='px-4 pb-4 pt-2 shrink-0'>
+      <div className="px-4 pb-4 pt-2 shrink-0">
         <SendInput />
       </div>
     </div>
