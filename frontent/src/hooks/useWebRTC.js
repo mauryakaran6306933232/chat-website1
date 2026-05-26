@@ -377,6 +377,9 @@ export const useWebRTC = () => {
   const currentCallerIdRef = useRef(null);
   const currentCallTypeRef = useRef(null);
 
+  // Track if we are in an active call (ref, not state, so socket handlers always see latest value)
+  const isInActiveCallRef = useRef(false);
+
   const callStartTime = useRef(null);
   const wasConnected = useRef(false);
 
@@ -469,7 +472,6 @@ export const useWebRTC = () => {
         credential: "fSkYeRbxNTUku5YV",
       },
     ],
-    // IMPORTANT: Use 'all' to allow both direct and TURN connections
     iceTransportPolicy: "all",
   });
 
@@ -483,9 +485,7 @@ export const useWebRTC = () => {
         ringbackToneRef.current.loop = true;
       }
       ringbackToneRef.current.play().catch(() => {});
-    } catch (e) {
-      // Ringtone file might not exist
-    }
+    } catch (e) {}
   };
 
   const stopRingback = () => {
@@ -502,9 +502,7 @@ export const useWebRTC = () => {
         incomingRingtoneRef.current.loop = true;
       }
       incomingRingtoneRef.current.play().catch(() => {});
-    } catch (e) {
-      // Ringtone file might not exist
-    }
+    } catch (e) {}
   };
 
   const stopIncoming = () => {
@@ -515,7 +513,7 @@ export const useWebRTC = () => {
   };
 
   // ==========================================
-  // UPDATE CONNECTION STATUS HELPER
+  // UPDATE CONNECTION STATUS
   // ==========================================
   const updateConnectionStatus = (status) => {
     console.log("■ Connection Status:", status);
@@ -557,13 +555,26 @@ export const useWebRTC = () => {
 
     // Handle remote tracks
     peerConnection.current.ontrack = (event) => {
-      console.log("■ ontrack fired:", event.track.kind, "streams:", event.streams.length);
-      const newRemoteStream = new MediaStream();
-      event.streams[0].getTracks().forEach((track) => {
-        newRemoteStream.addTrack(track);
-      });
-      remoteStreamRef.current = newRemoteStream;
-      setRemoteStreamState(new MediaStream(newRemoteStream.getTracks()));
+      console.log(
+        "■ ontrack fired:",
+        event.track.kind,
+        "streams:",
+        event.streams.length
+      );
+
+      // IMPORTANT: Build a fresh MediaStream from ALL tracks in event.streams[0]
+      // This prevents the "stream removed from document" issue
+      if (event.streams && event.streams[0]) {
+        remoteStreamRef.current = event.streams[0];
+      } else {
+        const newStream = new MediaStream();
+        newStream.addTrack(event.track);
+        remoteStreamRef.current = newStream;
+      }
+
+      // Create a NEW MediaStream object reference so React detects the change
+      const tracks = remoteStreamRef.current.getTracks();
+      setRemoteStreamState(new MediaStream(tracks));
     };
 
     // Handle ICE candidates
@@ -577,7 +588,6 @@ export const useWebRTC = () => {
           });
         }
       } else {
-        // ICE gathering is complete (null candidate)
         console.log("■ ICE gathering complete");
       }
     };
@@ -608,11 +618,8 @@ export const useWebRTC = () => {
 
       if (state === "disconnected") {
         updateConnectionStatus("reconnecting");
-        console.log(
-          "■ Disconnected - waiting 10s then trying ICE restart..."
-        );
+        console.log("■ Disconnected - waiting 5s then trying ICE restart...");
 
-        // Wait 5 seconds, then try ICE restart
         disconnectTimeoutRef.current = setTimeout(() => {
           if (
             peerConnection.current &&
@@ -638,12 +645,11 @@ export const useWebRTC = () => {
           attemptIceRestart();
         } else {
           updateConnectionStatus("failed");
-          // Don't auto-cleanup, let user see the error and decide
         }
       }
     };
 
-    // Handle ICE connection state (more granular than connection state)
+    // Handle ICE connection state
     peerConnection.current.oniceconnectionstatechange = () => {
       const iceState = peerConnection.current?.iceConnectionState;
       console.log("■ ICE Connection State:", iceState);
@@ -668,7 +674,7 @@ export const useWebRTC = () => {
   };
 
   // ==========================================
-  // ICE RESTART (CRITICAL FOR CROSS-NETWORK)
+  // ICE RESTART - USES A SEPARATE SOCKET EVENT
   // ==========================================
   const attemptIceRestart = async () => {
     try {
@@ -688,17 +694,25 @@ export const useWebRTC = () => {
 
       const targetId =
         currentCallerIdRef.current || currentTargetRef.current;
+
       if (targetId && socket) {
-        socket.emit("call_user", {
-          userToCall: targetId,
-          from: authUser?._id,
+        // =============================================
+        // FIX: Use "ice_restart_offer" instead of "call_user"
+        // This prevents the receiver from showing a new
+        // incoming call popup and destroying the video elements
+        // =============================================
+        socket.emit("ice_restart_offer", {
+          to: targetId,
           signal: offer,
           callType: currentCallTypeRef.current || callState.callType,
         });
       }
 
       updateConnectionStatus("reconnecting");
-      console.log("■ ICE restart offer sent, attempt:", iceRestartCount.current);
+      console.log(
+        "■ ICE restart offer sent, attempt:",
+        iceRestartCount.current
+      );
     } catch (error) {
       console.error("ICE restart failed:", error);
       if (iceRestartCount.current >= 3) {
@@ -721,6 +735,7 @@ export const useWebRTC = () => {
       callStartTime.current = null;
       wasConnected.current = false;
       iceRestartCount.current = 0;
+      isInActiveCallRef.current = true;
 
       setCallState({
         isCallActive: true,
@@ -792,6 +807,7 @@ export const useWebRTC = () => {
       callStartTime.current = null;
       wasConnected.current = false;
       iceRestartCount.current = 0;
+      isInActiveCallRef.current = true;
 
       const currentCallType =
         currentCallTypeRef.current || callState.callType;
@@ -835,10 +851,12 @@ export const useWebRTC = () => {
         signal: answer,
       });
 
+      // FIX: Update state - set isCallActive FIRST, then clear isIncomingCall
+      // This ensures video elements exist BEFORE we try to attach streams
       setCallState((prev) => ({
         ...prev,
-        isIncomingCall: false,
         isCallActive: true,
+        isIncomingCall: false,
         connectionStatus: "connecting",
       }));
     } catch (error) {
@@ -911,14 +929,13 @@ export const useWebRTC = () => {
   };
 
   // ==========================================
-  // RETRY CONNECTION (called from UI)
+  // RETRY CONNECTION
   // ==========================================
   const retryConnection = () => {
     console.log("■ User requested connection retry");
     iceRestartCount.current = 0;
 
     if (peerConnection.current) {
-      // Close and recreate everything
       if (localStream.current) {
         localStream.current.getTracks().forEach((track) => track.stop());
       }
@@ -935,19 +952,15 @@ export const useWebRTC = () => {
       remoteStreamRef.current = new MediaStream();
       iceCandidatesQueue.current = [];
 
-      // Re-initiate the call
       const targetId =
         currentCallerIdRef.current || currentTargetRef.current;
       const callType = currentCallTypeRef.current || callState.callType;
 
       if (targetId && callType) {
-        // If we were the receiver, we need to re-answer
-        // If we were the caller, we re-initiate
         const wasCaller = !currentCallerIdRef.current;
         if (wasCaller) {
           initiateCall(targetId, callType);
         } else {
-          // For receiver, try to re-answer with the stored signal
           answerCall();
         }
       }
@@ -1007,6 +1020,7 @@ export const useWebRTC = () => {
     callStartTime.current = null;
     wasConnected.current = false;
     iceRestartCount.current = 0;
+    isInActiveCallRef.current = false;
 
     setLocalStreamState(null);
     setRemoteStreamState(null);
@@ -1025,8 +1039,53 @@ export const useWebRTC = () => {
   useEffect(() => {
     if (!socket) return;
 
+    // =============================================
+    // FIX 1: incoming_call handler checks if already
+    // in an active call. If yes, it's an ICE restart
+    // from the old code - ignore it.
+    // =============================================
     const handleIncomingCall = ({ from, signal, callType }) => {
-      console.log("■ Incoming call from:", from, "type:", callType);
+      console.log(
+        "■ Incoming call from:",
+        from,
+        "type:",
+        callType,
+        "| Already in call:",
+        isInActiveCallRef.current
+      );
+
+      // If we're already in an active call, this is a stale/duplicate
+      // signal - DO NOT reset to incoming call state
+      if (isInActiveCallRef.current) {
+        console.log(
+          "■ Already in active call - treating as ICE restart offer"
+        );
+        // Handle as ICE restart: just update the remote description
+        if (peerConnection.current) {
+          peerConnection.current
+            .setRemoteDescription(new RTCSessionDescription(signal))
+            .then(() => {
+              processQueue();
+              // If we were the receiver, send a new answer back
+              return peerConnection.current.createAnswer();
+            })
+            .then((answer) => {
+              return peerConnection.current.setLocalDescription(answer);
+            })
+            .then(() => {
+              socket.emit("answer_call", {
+                to: from,
+                signal: peerConnection.current.localDescription,
+              });
+            })
+            .catch((err) => {
+              console.error("ICE restart renegotiation error:", err);
+            });
+        }
+        return;
+      }
+
+      // This is a genuinely new incoming call
       incomingSignalRef.current = signal;
       currentCallerIdRef.current = from;
       currentCallTypeRef.current = callType;
@@ -1040,6 +1099,37 @@ export const useWebRTC = () => {
       });
 
       playIncoming();
+    };
+
+    // =============================================
+    // FIX 2: Handle the new "ice_restart_offer" event
+    // This is the PROPER way to handle ICE restarts
+    // without triggering the incoming call popup
+    // =============================================
+    const handleIceRestartOffer = ({ from, signal }) => {
+      console.log("■ ICE restart offer received from:", from);
+
+      if (!peerConnection.current) return;
+
+      peerConnection.current
+        .setRemoteDescription(new RTCSessionDescription(signal))
+        .then(() => {
+          processQueue();
+          return peerConnection.current.createAnswer();
+        })
+        .then((answer) => {
+          return peerConnection.current.setLocalDescription(answer);
+        })
+        .then(() => {
+          socket.emit("answer_call", {
+            to: from,
+            signal: peerConnection.current.localDescription,
+          });
+          console.log("■ ICE restart answer sent");
+        })
+        .catch((err) => {
+          console.error("ICE restart offer handling error:", err);
+        });
     };
 
     const handleCallAccepted = async ({ signal }) => {
@@ -1091,6 +1181,7 @@ export const useWebRTC = () => {
     };
 
     socket.on("incoming_call", handleIncomingCall);
+    socket.on("ice_restart_offer", handleIceRestartOffer);
     socket.on("call_accepted", handleCallAccepted);
     socket.on("ice_candidate", handleIceCandidate);
     socket.on("call_ended", handleCallEnded);
@@ -1098,6 +1189,7 @@ export const useWebRTC = () => {
 
     return () => {
       socket.off("incoming_call", handleIncomingCall);
+      socket.off("ice_restart_offer", handleIceRestartOffer);
       socket.off("call_accepted", handleCallAccepted);
       socket.off("ice_candidate", handleIceCandidate);
       socket.off("call_ended", handleCallEnded);
@@ -1119,7 +1211,9 @@ export const useWebRTC = () => {
   // ==========================================
   const toggleMic = () => {
     if (localStream.current) {
-      localStream.current.getAudioTracks().forEach((t) => (t.enabled = !t.enabled));
+      localStream.current
+        .getAudioTracks()
+        .forEach((t) => (t.enabled = !t.enabled));
       return !localStream.current.getAudioTracks()[0]?.enabled;
     }
     return false;
@@ -1127,7 +1221,9 @@ export const useWebRTC = () => {
 
   const toggleCamera = () => {
     if (localStream.current) {
-      localStream.current.getVideoTracks().forEach((t) => (t.enabled = !t.enabled));
+      localStream.current
+        .getVideoTracks()
+        .forEach((t) => (t.enabled = !t.enabled));
       return !localStream.current.getVideoTracks()[0]?.enabled;
     }
     return false;

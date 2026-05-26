@@ -186,22 +186,87 @@ const CallModal = ({
   const localVideoRef = useRef();
   const remoteVideoRef = useRef();
 
+  // Track previous stream to avoid unnecessary updates
+  const prevLocalStreamRef = useRef(null);
+  const prevRemoteStreamRef = useRef(null);
+
   const phoneIconPath =
     "M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.49.57.55 0 1 .45 1 1v3.49c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.49z";
 
+  // =============================================
+  // FIX: Attach streams to video elements using
+  // srcObject ONLY when the element actually exists
+  // in the DOM. Use autoPlay instead of manual play().
+  // =============================================
   useEffect(() => {
-    if (callState.isCallActive && localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream;
-      localVideoRef.current.play().catch((e) => console.error("Local play error:", e));
+    const videoEl = localVideoRef.current;
+    if (!videoEl) return;
+    if (localStream === prevLocalStreamRef.current) return;
+    prevLocalStreamRef.current = localStream;
+
+    if (localStream) {
+      videoEl.srcObject = localStream;
+      // Don't call .play() manually - autoPlay handles it
+      // If we must play, catch all errors including AbortError
+      videoEl.play().catch((e) => {
+        // AbortError is normal when React re-renders mid-play
+        if (e.name !== "AbortError") {
+          console.error("Local video play error:", e);
+        }
+      });
+    } else {
+      videoEl.srcObject = null;
     }
-  }, [localStream, callState.isCallActive]);
+  }, [localStream]);
 
   useEffect(() => {
-    if (callState.isCallActive && remoteVideoRef.current && remoteStream) {
-      remoteVideoRef.current.srcObject = remoteStream;
-      remoteVideoRef.current.play().catch((e) => console.error("Remote play error:", e));
+    const videoEl = remoteVideoRef.current;
+    if (!videoEl) return;
+    if (remoteStream === prevRemoteStreamRef.current) return;
+    prevRemoteStreamRef.current = remoteStream;
+
+    if (remoteStream) {
+      videoEl.srcObject = remoteStream;
+      videoEl.play().catch((e) => {
+        // AbortError is normal when React re-renders mid-play
+        if (e.name !== "AbortError") {
+          console.error("Remote video play error:", e);
+        }
+      });
+    } else {
+      videoEl.srcObject = null;
     }
-  }, [remoteStream, callState.isCallActive]);
+  }, [remoteStream]);
+
+  // =============================================
+  // FIX: Also re-attach streams when call becomes
+  // active (video elements mount at this point)
+  // =============================================
+  useEffect(() => {
+    if (callState.isCallActive) {
+      // Small delay to ensure video elements are in DOM after render
+      const timer = setTimeout(() => {
+        if (localStream && localVideoRef.current) {
+          localVideoRef.current.srcObject = localStream;
+          localVideoRef.current.play().catch((e) => {
+            if (e.name !== "AbortError") {
+              console.error("Local video re-attach play error:", e);
+            }
+          });
+        }
+        if (remoteStream && remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = remoteStream;
+          remoteVideoRef.current.play().catch((e) => {
+            if (e.name !== "AbortError") {
+              console.error("Remote video re-attach play error:", e);
+            }
+          });
+        }
+      }, 100);
+
+      return () => clearTimeout(timer);
+    }
+  }, [callState.isCallActive, localStream, remoteStream]);
 
   if (!callState.isCallActive && !callState.isIncomingCall) return null;
 
@@ -214,9 +279,25 @@ const CallModal = ({
     if (status === "connecting") {
       return (
         <div className="flex items-center gap-2 text-yellow-400 text-sm animate-pulse">
-          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          <svg
+            className="animate-spin h-4 w-4"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            ></circle>
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
           </svg>
           <span>Connecting...</span>
         </div>
@@ -226,9 +307,25 @@ const CallModal = ({
     if (status === "reconnecting") {
       return (
         <div className="flex items-center gap-2 text-orange-400 text-sm animate-pulse">
-          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          <svg
+            className="animate-spin h-4 w-4"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              className="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="4"
+            ></circle>
+            <path
+              className="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
           </svg>
           <span>Reconnecting...</span>
         </div>
@@ -239,17 +336,18 @@ const CallModal = ({
       return (
         <div className="flex flex-col items-center gap-3">
           <div className="flex items-center gap-2 text-red-400 text-sm">
-            <span>⚠️ Connection failed</span>
+            <span>Connection failed</span>
           </div>
           <p className="text-gray-400 text-xs text-center max-w-[280px]">
-            This usually happens when the WiFi router blocks direct connections between devices.
+            This usually happens when the WiFi router blocks direct connections
+            between devices.
           </p>
           {onRetryConnection && (
             <button
               onClick={onRetryConnection}
               className="mt-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white text-sm rounded-lg transition-colors"
             >
-              🔄 Try Again
+              Try Again
             </button>
           )}
         </div>
@@ -282,7 +380,8 @@ const CallModal = ({
               </div>
 
               <h2 className="text-xl font-bold text-white">
-                Incoming {callState.callType === "video" ? "Video" : "Audio"} Call
+                Incoming {callState.callType === "video" ? "Video" : "Audio"}{" "}
+                Call
               </h2>
 
               <div className="flex gap-10 mt-2">
@@ -292,7 +391,12 @@ const CallModal = ({
                     className="w-14 h-14 rounded-full bg-red-500 flex items-center justify-center shadow-lg shadow-red-500/30"
                   >
                     <div className="rotate-[135deg]">
-                      <svg width="24" height="24" fill="white" viewBox="0 0 24 24">
+                      <svg
+                        width="24"
+                        height="24"
+                        fill="white"
+                        viewBox="0 0 24 24"
+                      >
                         <path d={phoneIconPath} />
                       </svg>
                     </div>
@@ -306,7 +410,12 @@ const CallModal = ({
                     className="w-14 h-14 rounded-full bg-green-500 flex items-center justify-center shadow-lg shadow-green-500/30"
                   >
                     <div className="-rotate-[135deg]">
-                      <svg width="24" height="24" fill="white" viewBox="0 0 24 24">
+                      <svg
+                        width="24"
+                        height="24"
+                        fill="white"
+                        viewBox="0 0 24 24"
+                      >
                         <path d={phoneIconPath} />
                       </svg>
                     </div>
@@ -350,11 +459,13 @@ const CallModal = ({
                   <div className="w-32 h-32 rounded-full bg-slate-800 flex items-center justify-center mb-6 animate-pulse">
                     <span className="text-7xl">📞</span>
                   </div>
-                  <p className="text-gray-400 text-lg">Audio Call in Progress</p>
+                  <p className="text-gray-400 text-lg">
+                    Audio Call in Progress
+                  </p>
                 </div>
               )}
 
-              {/* Connection Status Overlay (top center) */}
+              {/* Connection Status Overlay */}
               <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20">
                 <div className="bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full">
                   {getConnectionStatusUI()}
@@ -382,25 +493,29 @@ const CallModal = ({
                 </button>
               )}
 
-              {/* Retry button (only shown when failed) */}
-              {callState.connectionStatus === "failed" && onRetryConnection && (
-                <button
-                  onClick={onRetryConnection}
-                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-cyan-600 text-white text-xl sm:text-2xl flex items-center justify-center hover:bg-cyan-700 transition-colors"
-                  title="Retry Connection"
-                >
-                  🔄
-                </button>
-              )}
+              {callState.connectionStatus === "failed" &&
+                onRetryConnection && (
+                  <button
+                    onClick={onRetryConnection}
+                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-cyan-600 text-white text-xl sm:text-2xl flex items-center justify-center hover:bg-cyan-700 transition-colors"
+                    title="Retry Connection"
+                  >
+                    🔄
+                  </button>
+                )}
 
-              {/* End Call */}
               <button
                 onClick={onEnd}
                 className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-red-600 text-white text-xl sm:text-2xl flex items-center justify-center hover:bg-red-700 transition-colors shadow-lg shadow-red-600/30"
                 title="End Call"
               >
                 <div className="rotate-[135deg]">
-                  <svg width="24" height="24" fill="white" viewBox="0 0 24 24">
+                  <svg
+                    width="24"
+                    height="24"
+                    fill="white"
+                    viewBox="0 0 24 24"
+                  >
                     <path d={phoneIconPath} />
                   </svg>
                 </div>

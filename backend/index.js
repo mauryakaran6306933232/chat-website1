@@ -193,7 +193,6 @@ import cors from "cors";
 import http from "http";
 import { Server } from "socket.io";
 import mongoose from "mongoose";
-
 import { connectDB } from "./config/database.js";
 import UserRouter from "./routes/userRouter.js";
 import MessageRouter from "./routes/messageRouter.js";
@@ -202,23 +201,22 @@ import { Message } from "./models/messageModel.js";
 dotenv.config();
 
 const app = express();
-
 const port = process.env.PORT || 8000;
 
 // ==========================================
-// ✅ CONNECT DATABASE
+// CONNECT DATABASE
 // ==========================================
 connectDB();
 
 // ==========================================
-// ✅ MIDDLEWARES
+// MIDDLEWARES
 // ==========================================
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser());
 
 // ==========================================
-// ✅ CORS FIX (VERY IMPORTANT)
+// CORS
 // ==========================================
 app.use(
   cors({
@@ -228,28 +226,25 @@ app.use(
 );
 
 // ==========================================
-// ✅ ROUTES
+// ROUTES
 // ==========================================
 app.use("/test", UserRouter);
 app.use("/test", MessageRouter);
 
-// ==========================================
-// ✅ TEST ROUTE
-// ==========================================
 app.get("/", (req, res) => {
   return res.status(200).json({
     success: true,
-    message: "Backend is running successfully 🚀",
+    message: "Backend is running successfully",
   });
 });
 
 // ==========================================
-// ✅ CREATE HTTP SERVER
+// CREATE HTTP SERVER
 // ==========================================
 const server = http.createServer(app);
 
 // ==========================================
-// ✅ SOCKET.IO SETUP
+// SOCKET.IO SETUP
 // ==========================================
 const io = new Server(server, {
   cors: {
@@ -260,47 +255,39 @@ const io = new Server(server, {
 });
 
 // ==========================================
-// ✅ USER SOCKET MAP
+// USER SOCKET MAP
 // ==========================================
 const userSocketMap = {};
 
 // ==========================================
-// ✅ GET RECEIVER SOCKET ID
+// GET RECEIVER SOCKET ID
 // ==========================================
 export const getReceiverSocketId = (receiverId) => {
   return userSocketMap[receiverId];
 };
 
 // ==========================================
-// ✅ SOCKET CONNECTION
+// SOCKET CONNECTION
 // ==========================================
 io.on("connection", async (socket) => {
-  console.log("✅ User Connected:", socket.id);
+  console.log("User Connected:", socket.id);
 
-  // ==========================================
-  // ✅ GET USER ID FROM SOCKET QUERY
-  // ==========================================
   const userId = socket.handshake.query.userId;
 
   if (userId !== undefined) {
     userSocketMap[userId] = socket.id;
+    console.log(`Mapped User ${userId} to Socket ${socket.id}`);
 
-    console.log(`🔗 Mapped User ${userId} to Socket ${socket.id}`);
-
-    // ==========================================
-    // ✅ SEND ONLINE USERS
-    // ==========================================
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
 
     // ==========================================
-    // ✅ FETCH UNREAD COUNTS
+    // FETCH UNREAD COUNTS
     // ==========================================
     try {
       const unreadMessages = await Message.aggregate([
         {
           $match: {
             receiverId: new mongoose.Types.ObjectId(userId),
-
             readBy: {
               $not: {
                 $elemMatch: {
@@ -308,13 +295,11 @@ io.on("connection", async (socket) => {
                 },
               },
             },
-
             deletedForEveryone: {
               $ne: true,
             },
           },
         },
-
         {
           $group: {
             _id: "$senderId",
@@ -325,37 +310,23 @@ io.on("connection", async (socket) => {
         },
       ]);
 
-      // ==========================================
-      // ✅ CONVERT ARRAY TO OBJECT
-      // ==========================================
       const countsMap = {};
-
       unreadMessages.forEach((item) => {
         countsMap[item._id] = item.count;
       });
 
-      // ==========================================
-      // ✅ SEND TO CURRENT USER
-      // ==========================================
       socket.emit("initial_unread_counts", countsMap);
-
-      console.log(
-        `📬 Sent initial unread counts to ${userId}:`,
-        countsMap
-      );
-
+      console.log(`Sent initial unread counts to ${userId}:`, countsMap);
     } catch (error) {
-      console.log("❌ Error fetching unread counts:", error);
+      console.log("Error fetching unread counts:", error);
     }
   }
 
   // ==========================================
-  // ✅ CALL USER
+  // CALL USER (Initial call offer)
   // ==========================================
   socket.on("call_user", ({ userToCall, from, signal, callType }) => {
-
     const receiverSocketId = getReceiverSocketId(userToCall);
-
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("incoming_call", {
         from,
@@ -366,12 +337,26 @@ io.on("connection", async (socket) => {
   });
 
   // ==========================================
-  // ✅ TYPING INDICATOR
+  // ICE RESTART OFFER (NEW - separate from call_user)
+  // This prevents the receiver from showing a new
+  // incoming call popup during reconnection
+  // ==========================================
+  socket.on("ice_restart_offer", ({ to, signal, callType }) => {
+    const targetSocketId = getReceiverSocketId(to);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit("ice_restart_offer", {
+        from: socket.handshake.query.userId,
+        signal,
+        callType,
+      });
+    }
+  });
+
+  // ==========================================
+  // TYPING INDICATOR
   // ==========================================
   socket.on("typing", ({ to, from }) => {
-
     const receiverSocketId = getReceiverSocketId(to);
-
     if (receiverSocketId) {
       io.to(receiverSocketId).emit("typing", {
         from,
@@ -380,12 +365,10 @@ io.on("connection", async (socket) => {
   });
 
   // ==========================================
-  // ✅ ANSWER CALL
+  // ANSWER CALL
   // ==========================================
   socket.on("answer_call", ({ to, signal }) => {
-
     const callerSocketId = getReceiverSocketId(to);
-
     if (callerSocketId) {
       io.to(callerSocketId).emit("call_accepted", {
         signal,
@@ -394,12 +377,10 @@ io.on("connection", async (socket) => {
   });
 
   // ==========================================
-  // ✅ ICE CANDIDATE
+  // ICE CANDIDATE
   // ==========================================
   socket.on("ice_candidate", ({ to, candidate }) => {
-
     const targetSocketId = getReceiverSocketId(to);
-
     if (targetSocketId) {
       io.to(targetSocketId).emit("ice_candidate", {
         candidate,
@@ -408,50 +389,43 @@ io.on("connection", async (socket) => {
   });
 
   // ==========================================
-  // ✅ END CALL
+  // END CALL
   // ==========================================
   socket.on("end_call", ({ to }) => {
-
     const targetSocketId = getReceiverSocketId(to);
-
     if (targetSocketId) {
       io.to(targetSocketId).emit("call_ended");
     }
   });
 
   // ==========================================
-  // ✅ REJECT CALL
+  // REJECT CALL
   // ==========================================
   socket.on("reject_call", ({ to }) => {
-
     const callerSocketId = getReceiverSocketId(to);
-
     if (callerSocketId) {
       io.to(callerSocketId).emit("call_rejected");
     }
   });
 
   // ==========================================
-  // ✅ DISCONNECT
+  // DISCONNECT
   // ==========================================
   socket.on("disconnect", () => {
-
-    console.log("❌ User Disconnected:", socket.id);
-
+    console.log("User Disconnected:", socket.id);
     delete userSocketMap[userId];
-
     io.emit("getOnlineUsers", Object.keys(userSocketMap));
   });
 });
 
 // ==========================================
-// ✅ START SERVER
+// START SERVER
 // ==========================================
 server.listen(port, () => {
-  console.log(`🚀 Server has started at PORT ${port}`);
+  console.log(`Server has started at PORT ${port}`);
 });
 
 // ==========================================
-// ✅ EXPORTS
+// EXPORTS
 // ==========================================
 export { app, io, server };

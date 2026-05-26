@@ -92,7 +92,12 @@ const MesssageContainer = ({ onBack, onInitiateCall }) => {
             className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors"
             title="Audio Call"
           >
-            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+            <svg
+              width="20"
+              height="20"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path d="M20.01 15.38c-1.23 0-2.42-.2-3.53-.56a.977.977 0 0 0-1.01.24l-1.57 1.97c-2.83-1.35-5.48-3.9-6.89-6.83l1.95-1.66c.34-.35.44-.85.25-1.29A11.54 11.54 0 0 1 8.65 4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1 0 9.39 7.61 17 17 17 .55 0 1-.45 1-1v-3.63c0-.55-.45-1-1-1z" />
             </svg>
           </button>
@@ -101,7 +106,12 @@ const MesssageContainer = ({ onBack, onInitiateCall }) => {
             className="w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors"
             title="Video Call"
           >
-            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24">
+            <svg
+              width="20"
+              height="20"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+            >
               <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
             </svg>
           </button>
